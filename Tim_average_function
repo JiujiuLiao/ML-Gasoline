@@ -8,7 +8,7 @@ prices <- read.csv("2024-04-25-BB-prices.csv")
 
 prices[,2] <- as.POSIXct(prices[,2])
 
-####### AVERAGE PRICE FUNCTION ######################
+#######AVERAGE PRICE FUNCTION######################
 as.numeric(min(prices[,2]))
 # 00:00 25.04 => 1713996000
 
@@ -26,39 +26,51 @@ average_price <- function(id, fueltype){
     # We add 3600 sec (1 hour) times the iterated step to get a start and end time for the period we look at
     starter <- 1713996000 + (i-1)*3600
     end <- starter + 3600
-    # cutting 
-    within_price_changes <- testprice[testprice$date <= end & testprice$date >= starter,]
+    # cutting the dataframe to only show price changes within the selected hour for the selected station
+    within_price_changes <- price[prices$station_uuid == id &
+                                    price$date <= end &
+                                    price$date >= starter,]
     
-    #very first price to be set, before this price we have no information for the prices of the given gas station
+    # very first price to be set, before this price we have no information for the prices of the given gas station
     if (nrow(within_price_changes) != 0 & is.na(last_price)){
       last_price <- within_price_changes[within_price_changes[,"date"] == max(within_price_changes[,"date"]),fueltype]
     }
     
-    #if there is a price that has been set there are different cases for what can happen
+    # after a first price has been set there are different cases for what can happen
     else if (is.na(last_price) == FALSE){
-      
+      # case 1: the entire hour goes by without another change in price. The average is the last price that was set.
       if (nrow(within_price_changes) == 0){
         averages[i] <- last_price
       }
+      # case 2: one price has been set, old and new price are averaged according to their fraction of the hour
       else if (nrow(within_price_changes) == 1){
         averages[i] <- as.numeric(((as.numeric(within_price_changes[1,"date"]) - starter)) * last_price + 
                                     (end - as.numeric(within_price_changes[1,"date"])) * within_price_changes[1,fueltype]) /
           3600
       }
+      # case 3: more than one price has been set. They are all averaged according to their fraction of the hour
       else{
+        
+        # fraction of the price that was set before the start of the hour
         first_part <-  ((as.numeric(within_price_changes[1,"date"]) - starter) * last_price ) /
           3600
+        
+        # fractions of the prices set within the hour
         other_parts <- NA
         for (j in 1:(nrow(within_price_changes))){
+          
+          # last price to be set
           if (j == nrow(within_price_changes)){
             other_parts[j] <- ((end - as.numeric(within_price_changes[j,"date"])) * within_price_changes[j,fueltype]) /
               3600
           }
+          # all the other prices. in general they follow the formula ((t3 - t2)*p2)/3600, where p2 is the second price set, t2 is the time its set and t3 is the time the third price is set
           else {
             other_parts[j] <- ((as.numeric(within_price_changes[(j+1),"date"]) - as.numeric(within_price_changes[j,"date"])) * within_price_changes[j,fueltype] ) /
               3600
           }
         }
+        #summing up the fractions
         averages[i] <- sum(c(first_part, other_parts))
       }
     }
@@ -67,6 +79,7 @@ average_price <- function(id, fueltype){
   #return(testing) #use in case it breaks and insert stuff like testing[i] <- i 
 }
 
+#example how to use the function
 average_price("ec18ae16-4359-49d5-acbb-3b5e31d214aa","diesel")
 
 
