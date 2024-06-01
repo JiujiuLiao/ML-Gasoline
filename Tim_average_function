@@ -27,9 +27,9 @@ average_price <- function(id, fueltype){
     starter <- 1713996000 + (i-1)*3600
     end <- starter + 3600
     # cutting the dataframe to only show price changes within the selected hour for the selected station
-    within_price_changes <- price[prices$station_uuid == id &
-                                    price$date <= end &
-                                    price$date >= starter,]
+    within_price_changes <- prices[prices$station_uuid == id &
+                                    prices$date <= end &
+                                    prices$date >= starter,]
     
     # very first price to be set, before this price we have no information for the prices of the given gas station
     if (nrow(within_price_changes) != 0 & is.na(last_price)){
@@ -84,9 +84,21 @@ average_price("ec18ae16-4359-49d5-acbb-3b5e31d214aa","diesel")
 
 
 ##############ADDING AVERAGE PRICES TO STATION#######################
-
-hourly_averages <- data.frame()
+rm(hourly_averages)
+hourly_averages <- data.frame(unique(stations$uuid))
+colnames(hourly_averages) <- "id"
 
 for (id in unique(stations$uuid)) {
-  print(id)
+  station_id_row <- unique(stations$uuid) == id
+  hourly_averages[station_id_row, 2:26] <- average_price(id,"diesel") 
 }
+
+A <- NA
+for (i in 1:25){
+  starter <- 1713996000 + (i-1)*3600
+  end <- starter + 3600
+  colnames(hourly_averages[,2:26])[i] <- paste(strftime(starter, format = "%m.%d. %H:%M"),"-",strftime(end, format = "%H:%M"), sep = " ")
+}
+
+
+unique(stations$uuid) == "ec18ae16-4359-49d5-acbb-3b5e31d214aa"
