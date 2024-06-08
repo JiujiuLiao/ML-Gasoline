@@ -1,19 +1,24 @@
 setwd("C:/TU/EmpiricalMethodsSpatial/GasStation/data")
 Sys.setenv(LANG="en")
-options(digits=15) # stops R from writing big numbers as 14*e9 and write them out instead
+options(digits=3) # stops R from writing big numbers as 14*e9 and write them out instead
 
 #reading data
 stations <- read.csv("2024-04-25-stations-modify-2.csv")
 prices <- read.csv("2024-04-25-BB-prices.csv")
 
+is.character(prices[2,2])
+prices[2,2] + 3600
+
 prices[,2] <- as.POSIXct(prices[,2])
 
+is.character(prices[2,2])
+prices[2,2] + 3600
 #######AVERAGE PRICE FUNCTION######################
 as.numeric(min(prices[,2]))
 # 00:00 25.04 => 1713996000
 
 #testprice <- prices[prices$station_uuid=="ec18ae16-4359-49d5-acbb-3b5e31d214aa",]
-
+strftime(1713996001, format = "%u")
 average_price <- function(id, fueltype){
   #initializing variables to be used later
   averages <- NA
@@ -28,8 +33,8 @@ average_price <- function(id, fueltype){
     end <- starter + 3600
     # cutting the dataframe to only show price changes within the selected hour for the selected station
     within_price_changes <- prices[prices$station_uuid == id &
-                                    prices$date <= end &
-                                    prices$date >= starter,]
+                                     prices$date <= end &
+                                     prices$date >= starter,]
     
     # very first price to be set, before this price we have no information for the prices of the given gas station
     if (nrow(within_price_changes) != 0 & is.na(last_price)){
@@ -86,7 +91,7 @@ average_price("ec18ae16-4359-49d5-acbb-3b5e31d214aa","diesel")
 ##############ADDING AVERAGE PRICES TO STATION#######################
 rm(hourly_averages)
 hourly_averages <- data.frame(unique(stations$uuid))
-colnames(hourly_averages) <- "id"
+colnames(hourly_averages)[1] <- "id"
 
 for (id in unique(stations$uuid)) {
   station_id_row <- unique(stations$uuid) == id
@@ -97,8 +102,10 @@ A <- NA
 for (i in 1:25){
   starter <- 1713996000 + (i-1)*3600
   end <- starter + 3600
-  colnames(hourly_averages[,2:26])[i] <- paste(strftime(starter, format = "%m.%d. %H:%M"),"-",strftime(end, format = "%H:%M"), sep = " ")
+  A[i] <- paste(strftime(starter, format = "%b.%d. %H:%M"),"-",strftime(end, format = "%H:%M"), sep = " ")
 }
+colnames(hourly_averages)[2:26] <- A
+rm(A)
 
-
-unique(stations$uuid) == "ec18ae16-4359-49d5-acbb-3b5e31d214aa"
+library(tidyr)
+hourly_averages_long <- pivot_longer(hourly_averages, !id, names_to = "time", values_to = "price")
