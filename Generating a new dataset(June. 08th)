@@ -1,0 +1,127 @@
+#set work directory
+setwd("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th")
+setwd("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Station dataset Feb.09th - Mar.07th")
+#######################################################################################
+###############################pre-processing data#####################################
+#######################################################################################
+#combine prices data of day 0209 and 0210
+prices_0209th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th/2024-02-09-prices.csv")
+prices_0210th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th/2024-02-10-prices.csv")
+prices_0910 <- rbind(prices_0209th,prices_0210th)
+
+#combine stations data of day 02.09 and 02.10
+stations_0209th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Station dataset Feb.09th - Mar.07th/2024-02-09-stations.csv")
+stations_0210th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Station dataset Feb.09th - Mar.07th/2024-02-10-stations.csv")
+stations_0910 <- rbind(stations_0209th,stations_0210th)
+
+
+
+#is.character(prices_0209th[2,2])
+#prices_0209th[2,2] + 3600
+
+prices_0910[,"date"] <- as.POSIXct(prices_0910[,"date"])
+
+sapply(prices_0910, function(x) sum(is.na(x)))
+#is.character(prices[2,2])
+#prices[2,2] + 3600
+#######AVERAGE PRICE FUNCTION######################
+as.numeric(min(prices_0910[,"date"]))
+# 00:00 25.04 => 1713996000
+
+#testprice <- prices_0910[prices_0910$station_uuid=="ec18ae16-4359-49d5-acbb-3b5e31d214aa",]
+
+strftime(1707433200)
+
+average_price <- function(id, fueltype){
+  #initializing variables to be used later
+  averages <- NA
+  last_price <- NA
+  testing <- NA
+  #iterating over 25 steps 
+  for (i in 1:48){
+    averages[i] <- NA
+    # 1707433200 is 00:00:00 09.02.24
+    # We add 3600 sec (1 hour) times the iterated step to get a start and end time for the period we look at
+    starter <- 1707433200 + (i-1)*3600
+    end <- starter + 3600
+    # cutting the dataframe to only show price changes within the selected hour for the selected station
+    within_price_changes <- prices_0910[prices_0910$station_uuid == id &
+                                     prices_0910$date <= end &
+                                     prices_0910$date >= starter,]
+    
+    # very first price to be set, before this price we have no information for the prices of the given gas station
+    if (nrow(within_price_changes) != 0 & is.na(last_price)){
+      last_price <- within_price_changes[within_price_changes[,"date"] == max(within_price_changes[,"date"]),fueltype]
+    }
+    
+    # after a first price has been set there are different cases for what can happen
+    else if (is.na(last_price) == FALSE){
+      # case 1: the entire hour goes by without another change in price. The average is the last price that was set.
+      if (nrow(within_price_changes) == 0){
+        averages[i] <- last_price
+      }
+      # case 2: one price has been set, old and new price are averaged according to their fraction of the hour
+      else if (nrow(within_price_changes) == 1){
+        averages[i] <- as.numeric(((as.numeric(within_price_changes[1,"date"]) - starter)) * last_price + 
+                                    (end - as.numeric(within_price_changes[1,"date"])) * within_price_changes[1,fueltype]) /
+          3600
+      }
+      # case 3: more than one price has been set. They are all averaged according to their fraction of the hour
+      else{
+        
+        # fraction of the price that was set before the start of the hour
+        first_part <-  ((as.numeric(within_price_changes[1,"date"]) - starter) * last_price ) /
+          3600
+        
+        # fractions of the prices set within the hour
+        other_parts <- NA
+        for (j in 1:(nrow(within_price_changes))){
+          
+          # last price to be set
+          if (j == nrow(within_price_changes)){
+            other_parts[j] <- ((end - as.numeric(within_price_changes[j,"date"])) * within_price_changes[j,fueltype]) /
+              3600
+          }
+          # all the other prices. in general they follow the formula ((t3 - t2)*p2)/3600, where p2 is the second price set, t2 is the time its set and t3 is the time the third price is set
+          else {
+            other_parts[j] <- ((as.numeric(within_price_changes[(j+1),"date"]) - as.numeric(within_price_changes[j,"date"])) * within_price_changes[j,fueltype] ) /
+              3600
+          }
+        }
+        #summing up the fractions
+        averages[i] <- sum(c(first_part, other_parts))
+      }
+    }
+  }
+  return(averages)
+  #return(testing) #use in case it breaks and insert stuff like testing[i] <- i 
+}
+
+#example how to use the function
+average_price("ec18ae16-4359-49d5-acbb-3b5e31d214aa","diesel")
+
+
+##############ADDING AVERAGE PRICES TO STATION#######################
+rm(hourly_averages)
+hourly_averages <- data.frame(unique(stations_0910$uuid))
+colnames(hourly_averages)[1] <- "id"
+
+#creating a table with every gas station as rows and the columns being the 48 hour windows where we take averages
+for (id in unique(stations_0910$uuid)) {        
+  station_id_row <- unique(stations_0910$uuid) == id
+  hourly_averages[station_id_row, 2:49] <- average_price(id,"diesel") 
+}
+
+A <- NA
+for (i in 1:48){
+  starter <- 1707433200 + (i-1)*3600
+  end <- starter + 3600
+  A[i] <- paste(strftime(starter, format = "%b.%d. %H:%M"),"-",strftime(end, format = "%H:%M"), sep = " ")
+}
+colnames(hourly_averages)[2:49] <- A
+rm(A)
+
+library(tidyr)
+hourly_averages_long <- pivot_longer(hourly_averages, !id, names_to = "time", values_to = "price")
+
+
