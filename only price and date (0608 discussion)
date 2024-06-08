@@ -1,0 +1,119 @@
+#libraries
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(tidyverse)
+library(xts)
+library(scales)
+library(mlr3)
+library(mlr3verse)
+library(mlr3viz)
+library(lubridate)
+library(forecast)
+library(mlr3temporal)
+
+#set work directory
+setwd("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th")
+
+#######################################################################################
+###############################pre-processing data#####################################
+#######################################################################################
+#combine prices data of day 0209 and 0210
+prices_0209th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th/2024-02-09-prices.csv")
+prices_0210th <- read.csv("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics/Price dataset Feb.09th - Mar.07th/2024-02-10-prices.csv")
+prices_0910 <- rbind(prices_0209th,prices_0210th)
+
+
+#convert blank cells in two data sets into NA, then use function to remove missing values
+prices_0910[prices_0910==""] <- NA
+
+
+#check how many missing values are in stations_0910 and prices_0910 dataset
+sum(is.na(prices_0910))   # 0 missing values
+
+
+
+
+
+#delete unreasonable data which gasoline price is or less or equal to 0 
+p_0910 <- subset(prices_0910, diesel > 0& e5 > 0& e10 > 0)
+
+# change the p_sub_df data set into a long table using gather function
+p_long_df <- gather(p_0910, fuel_type, value, diesel, e5, e10)
+
+# draw a density plot of three different gasolines
+ggplot(p_long_df, aes(x = value, color = fuel_type)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.5, position = 'identity', bins = 30) +
+  geom_density(alpha = 0.7) +
+  labs(x = "Price", y = "Density", fill = "Fuel Type")
+
+#convert time into date form
+p_0910$date <- as.POSIXct(p_0910$date, format="%Y-%m-%d %H:%M:%S")
+
+#order data by date
+pseq_0910 <- p_0910[order(p_0910$date),]
+
+#select diesel price and date
+df_0910 <- select(pseq_0910,date,diesel)
+
+#calculate average diesel price at one time point, because TaskRegrForecast cannot solve time series data with duplicated information
+aggregated_data <- aggregate(diesel ~ date, data = df_0910, FUN = mean)
+
+# split train-test dataset
+split_date <- as.POSIXct("2024-02-10 12:00:00", format="%Y-%m-%d %H:%M:%S")
+train_set <- subset(aggregated_data, date <= split_date)
+test_set <- subset(aggregated_data, date > split_date)
+
+# set a task
+task <- TaskRegrForecast$new(id = "fuel", 
+                             backend = aggregated_data, 
+                             target = "diesel",
+                             date_col = "date")
+print(task)
+
+
+# set a learner
+learner = lrn("forecast.auto_arima")
+
+print(learner)
+
+# train model
+learner$train(task,row_ids = 1:1776)
+
+# predict
+predictions <- learner$predict(task,row_ids = 1777:2434)
+print(predictions)
+
+# measure
+measures <- msrs(c("forecast.mse","forecast.mae"))
+msr("time_train")
+msr("time_predict")
+msr("time_both") 
+msr("selected_features")
+# visualise
+#autoplot(task)
+
+#load MSE and MAE measures
+predictions$score(measures)
+
+
+
+
+#######################Resampling#######################
+#as.data.table(mlr_resamplings)
+
+task = tsk()
+#learner = lrn("forecast.VAR")
+resampling = rsmp("forecast_holdout", ratio = 0.8)
+rr = resample(task, learner, resampling, store_models = TRUE)
+rr$aggregate(msr("forecast.mae"))
+
+
+
+rr = rsmp("RollingWindowCV", fixed_window = F)
+rr$instantiate(task)
+resample = resample(task, learner, rr, store_models = TRUE)
+
+resample$predictions()[1:2]
+
+
