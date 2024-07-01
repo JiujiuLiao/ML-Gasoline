@@ -1,9 +1,9 @@
 #set work directory
-setwd("C:/TU/DataGasProject")
+setwd("C:/TU/EmpiricalMethodsSpatial/GasStation/data")
 
 
 #loading data
-stations_0209th <- read.csv("2024-02-09-stations.csv")
+stations <- read.csv("2024-04-25-stations-modify-2.csv")
 
 # basic function we use to replace any brands in the list of current names with a new name
 replace_station_name <- function(current_name, new_name){
@@ -11,9 +11,11 @@ replace_station_name <- function(current_name, new_name){
   return(A$brand)
 }
 
-### Loading it to a seconds dataframe for testing purposes ###
-A <- stations_0209th
+# Loading it to a seconds dataframe for testing purposes
+A <- stations
+brand_table_before <- as.data.frame(table(A$brand))
 
+############## going through different typos and names and combining where reasonable ####################
 #all the variants of free gas stations in the bft club (whichis not a company, but for a model we can treat as one)
 A$brand <- replace_station_name(unique(grep(pattern = "bft", x = A$brand, ignore.case = TRUE, value = TRUE)),"bft")
 
@@ -86,7 +88,29 @@ A$brand <- replace_station_name(unique(grep(pattern = "nordoel", x = A$brand, ig
 # Globus
 A$brand <- replace_station_name(unique(grep(pattern = "globus", x = A$brand, ignore.case = TRUE, value = TRUE)),"Globus")
 
-review <- as.data.frame(table(A$brand))
+brand_table_after <- as.data.frame(table(A$brand))
+
+############ adding a columns combining small brands into one group #################
+
+brand_100 <- brand_table_after[brand_table_after$Freq > 100,]
+A$brand_100[A$brand %in% brand_100$Var1] <- A$brand[A$brand %in% brand_100$Var1]
+A$brand_100[!A$brand %in% brand_100$Var1] <- "<100 stations brand"
+brand_table_100 <- as.data.frame(table(A$brand_100))
+
+brand_40 <- brand_table_after[brand_table_after$Freq > 40,]
+A$brand_40[A$brand %in% brand_40$Var1] <- A$brand[A$brand %in% brand_40$Var1]
+A$brand_40[!A$brand %in% brand_40$Var1] <- "<40 stations brand"
+brand_table_40 <- as.data.frame(table(A$brand_40))
+
+brand_10 <- brand_table_after[brand_table_after$Freq > 10,]
+A$brand_10[A$brand %in% brand_10$Var1] <- A$brand[A$brand %in% brand_10$Var1]
+A$brand_10[!A$brand %in% brand_10$Var1] <- "<10 stations brand"
+brand_table_10 <- as.data.frame(table(A$brand_10))
+
+brand_5 <- brand_table_after[brand_table_after$Freq > 5,]
+A$brand_5[A$brand %in% brand_5$Var1] <- A$brand[A$brand %in% brand_5$Var1]
+A$brand_5[!A$brand %in% brand_5$Var1] <- "<5 stations brand"
+brand_table_5 <- as.data.frame(table(A$brand_5))
 
 
-write.csv(x = A, file = "new_filename.csv")
+write.csv(x = A, file = "2024-04-25-stations-modify-2-cleaned-brands.csv")
