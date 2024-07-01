@@ -1,0 +1,92 @@
+#set work directory
+setwd("C:/TU/DataGasProject")
+
+
+#loading data
+stations_0209th <- read.csv("2024-02-09-stations.csv")
+
+# basic function we use to replace any brands in the list of current names with a new name
+replace_station_name <- function(current_name, new_name){
+  A$brand[which(A$brand %in% current_name)] <- new_name
+  return(A$brand)
+}
+
+### Loading it to a seconds dataframe for testing purposes ###
+A <- stations_0209th
+
+#all the variants of free gas stations in the bft club (whichis not a company, but for a model we can treat as one)
+A$brand <- replace_station_name(unique(grep(pattern = "bft", x = A$brand, ignore.case = TRUE, value = TRUE)),"bft")
+
+# variants of AVIA
+A$brand <- replace_station_name(unique(grep(pattern = "avia", x = A$brand, ignore.case = TRUE, value = TRUE)),"AVIA")
+
+#ARAL
+A$brand <- replace_station_name(unique(grep(pattern = "aral", x = A$brand, ignore.case = TRUE, value = TRUE)),"ARAL")
+
+#Shell
+A$brand <- replace_station_name(unique(grep(pattern = "shell", x = A$brand, ignore.case = TRUE, value = TRUE)),"Shell")
+
+#ESSO - in this case grep includes other brands and there is only one variant
+A$brand <- replace_station_name("Esso","ESSO")
+
+#TotalEnergies
+A$brand <- replace_station_name(unique(grep(pattern = "total", x = A$brand, ignore.case = TRUE, value = TRUE)),"TotalEnergies")
+
+# AGIP ENI
+A$brand <- replace_station_name(unique(grep(pattern = "agip", x = A$brand, ignore.case = TRUE, value = TRUE)),"AGIP ENI")
+
+# Raiffeisen
+A$brand <- replace_station_name(unique(grep(pattern = "raiffeisen", x = A$brand, ignore.case = TRUE, value = TRUE)),"Raiffeisen")
+
+# orlen is part of STAR
+A$brand <- replace_station_name(unique(grep(pattern = "orlen", x = A$brand, ignore.case = TRUE, value = TRUE)),"STAR")
+
+# tamoil and hem are the same company
+A$brand <- replace_station_name(unique(grep(pattern = "tamoil", x = A$brand, ignore.case = TRUE, value = TRUE)),"HEM")
+
+# OIL!
+A$brand <- replace_station_name(unique(grep(pattern = "oil!", x = A$brand, ignore.case = TRUE, value = TRUE)),"OIL!")
+
+# variations on free gas station names
+A$brand <- replace_station_name(unique(grep(pattern = "frei", x = A$brand, ignore.case = TRUE, value = TRUE)),"Freie Tankstelle")
+
+# Westfalen
+A$brand <- replace_station_name(unique(grep(pattern = "westfalen", x = A$brand, ignore.case = TRUE, value = TRUE)),"Westfalen")
+
+# Classic
+A$brand <- replace_station_name(unique(grep(pattern = "classic", x = A$brand, ignore.case = TRUE, value = TRUE)),"CLASSIC")
+
+# varaiations on supermarket gas stations
+A$brand <- replace_station_name(unique(grep(pattern = "supermarkt", x = A$brand, ignore.case = TRUE, value = TRUE)),"Supermarkt-Tankstelle")
+
+# Hoyer
+A$brand <- replace_station_name(unique(grep(pattern = "hoyer", x = A$brand, ignore.case = TRUE, value = TRUE)),"Hoyer")
+
+# EDEKA
+A$brand <- replace_station_name(unique(grep(pattern = "edeka", x = A$brand, ignore.case = TRUE, value = TRUE)),"EDEKA")
+
+# Q1
+A$brand <- replace_station_name(unique(grep(pattern = "q1", x = A$brand, ignore.case = TRUE, value = TRUE)),"Q1")
+
+# ELAN
+A$brand <- replace_station_name(unique(grep(pattern = "elan", x = A$brand, ignore.case = TRUE, value = TRUE)),"ELAN")
+
+# Orlen
+A$brand <- replace_station_name(unique(grep(pattern = "orlen", x = A$brand, ignore.case = TRUE, value = TRUE)),"ORLEN")
+
+# PM
+A$brand <- replace_station_name(unique(grep(pattern = "pm", x = A$brand, ignore.case = TRUE, value = TRUE)),"PM")
+
+# markant
+A$brand <- replace_station_name(unique(grep(pattern = "markant", x = A$brand, ignore.case = TRUE, value = TRUE)),"Markant")
+
+# NORDOEL
+A$brand <- replace_station_name(unique(grep(pattern = "nordoel", x = A$brand, ignore.case = TRUE, value = TRUE)),"NORDOEL")
+
+# Globus
+A$brand <- replace_station_name(unique(grep(pattern = "globus", x = A$brand, ignore.case = TRUE, value = TRUE)),"Globus")
+
+review <- as.data.frame(table(A$brand))
+
+
+write.csv(x = A, file = "new_filename.csv")
