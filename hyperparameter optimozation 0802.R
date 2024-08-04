@@ -1,3 +1,11 @@
+# in case regr.ksvm not found execute following comments
+# 
+#options(repos = c(
+#  mlrorg = "https://mlr-org.r-universe.dev",
+#  CRAN = "https://cloud.r-project.org/"
+#))
+# install.packages("mlr3extralearners")
+
 library(dplyr)
 library(ggplot2)
 
@@ -20,6 +28,7 @@ test.df <- df.subset.e5[1:2000,]
 
 ##################ML process ################
 library(mlr3)
+library(mlr3extralearners)
 library(mlr3verse)
 library(mlr3viz)
 library(rpart)
@@ -113,8 +122,8 @@ instance_hb = TuningInstanceSingleCrit$new(
 instance_hb
 
 #We load the Hyperband tuner and set eta = 3.
-library("mlr3tuning")
-library("mlr3hyperband")
+library(mlr3tuning)
+library(mlr3hyperband)
 tuner = tnr("hyperband", eta = 3)
 tuner$optimize(instance_hb)
 
