@@ -32,6 +32,8 @@ library(mlr3)
 library(mlr3extralearners)
 library(mlr3verse)
 library(mlr3viz)
+library(mlr3tuning)
+library(mlr3hyperband)
 library(rpart)
 library(kknn)
 #library(xgboost)
@@ -123,8 +125,7 @@ instance_hb = TuningInstanceSingleCrit$new(
 instance_hb
 
 #We load the Hyperband tuner and set eta = 3.
-library(mlr3tuning)
-library(mlr3hyperband)
+
 tuner = tnr("hyperband", eta = 3)
 tuner$optimize(instance_hb)
 
