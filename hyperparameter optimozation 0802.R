@@ -24,6 +24,7 @@ df.subset.e5[,6] <- as.factor(df.subset.e5[,6])
 df.subset.e5[,7] <- as.factor(df.subset.e5[,7])
 df.subset.e5[,9] <- as.factor(df.subset.e5[,9])
 df.subset.e5[,10] <- as.factor(df.subset.e5[,10])
+df.subset.e5[,11] <- as.factor(df.subset.e5[,11])
 test.df <- df.subset.e5[1:2000,]
 
 ##################ML process ################
