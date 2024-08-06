@@ -210,14 +210,14 @@ autoplot(bmr) +
 1
 # train the model with all dataset using random forest
 #data spliting
-#train_all.data <- subset(df.subset.e5, df.subset.e5[, 9] != "Thu")
-#test_all.data <- subset(df.subset.e5, df.subset.e5[, 9] == "Thu")
+train_all.data <- subset(df.subset.e5, df.subset.e5[, 9] != "Thu")
+test_all.data <- subset(df.subset.e5, df.subset.e5[, 9] == "Thu")
 
 #Monday data set
 #df.Monday <- subset(df.subset.e5, df.subset.e5[,9] == "Mon")
 #Monday and Tuesday dataset
-df.MTW <- df.subset.e5 %>% filter(day %in% c("Mon", "Tue","Wed"))
-rm(df.subset.e5)
+#df.MTW <- df.subset.e5 #%>% filter(day %in% c("Mon", "Tue","Wed"))
+#rm(df.subset.e5)
 #make this example reproducible
 set.seed(2024)
 
@@ -226,27 +226,24 @@ set.seed(2024)
 #train.Monday  <- df.Monday[sample, ]
 #test.Monday   <- df.Monday[!sample, ]
 
-# Check the number of rows for each day
-#day_counts <- table(df.subset.e5$day)
-#print(day_counts)
-
 #task defining
 #tsk_e5.price.fulldataset = as_task_regr(train_all.data, target = "e5_price")
 #print(tsk_e5.price.fulldataset)
-tsk_e5.price.MTW = as_task_regr(df.MTW, target = "e5_price")
-print(tsk_e5.price.MTW)
+tsk_e5.price.all = as_task_regr(df.subset.e5, target = "e5_price")
+print(tsk_e5.price.all)
 
 # load MSE and MAE measures
 #measures = msrs("regr.rmse")
-splits = partition(tsk_e5.price.MTW)
+#splits = partition(tsk_e5.price.MTW)
 
 # train learner
 #at_ranger$train(tsk_e5.price.fulldataset)
 #Monday data
-at_ranger$train(tsk_e5.price.MTW,splits$train)
+at_ranger$train(tsk_e5.price.all, train_all.data)
+
 
 # make and score predictions
 #at_ranger$predict(tsk_e5.price.Monday)$score(measures)
 
-prediction = at_ranger$predict(tsk_e5.price.Monday, splits$test)
+prediction = at_ranger$predict(tsk_e5.price.MTW, test_all.data)
 
