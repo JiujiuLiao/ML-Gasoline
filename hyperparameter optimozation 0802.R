@@ -202,48 +202,15 @@ autoplot(bmr) +
   ylab("Regression rmse") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12)) 
 
-
-
-
-
-
 1
-# train the model with all dataset using random forest
-#data spliting
-train_all.data <- subset(df.subset.e5, df.subset.e5[, 9] != "Thu")
-test_all.data <- subset(df.subset.e5, df.subset.e5[, 9] == "Thu")
+library(purrr)  # For using the map function
+# Split maps# Split the data into training and testing sets
+train_data <- test.df %>% filter(day %in% c("Fri", "Sat", "Sun", "Mon", "Tue"))
+test_data <- test.df %>% filter(day %in% c("Wed", "Thu"))
 
-#Monday data set
-#df.Monday <- subset(df.subset.e5, df.subset.e5[,9] == "Mon")
-#Monday and Tuesday dataset
-#df.MTW <- df.subset.e5 #%>% filter(day %in% c("Mon", "Tue","Wed"))
-#rm(df.subset.e5)
-#make this example reproducible
-set.seed(2024)
+# Predict on the test data using the trained ranger model
+predictions <- at_ranger$predict_newdata(test_data)
+print(predictions)
 
-#use 70% of dataset as training set and 30% as test set
-#sample <- sample(c(TRUE, FALSE), nrow(df.Monday), replace=TRUE, prob=c(0.7,0.3))
-#train.Monday  <- df.Monday[sample, ]
-#test.Monday   <- df.Monday[!sample, ]
-
-#task defining
-#tsk_e5.price.fulldataset = as_task_regr(train_all.data, target = "e5_price")
-#print(tsk_e5.price.fulldataset)
-tsk_e5.price.all = as_task_regr(df.subset.e5, target = "e5_price")
-print(tsk_e5.price.all)
-
-# load MSE and MAE measures
-#measures = msrs("regr.rmse")
-#splits = partition(tsk_e5.price.MTW)
-
-# train learner
-#at_ranger$train(tsk_e5.price.fulldataset)
-#Monday data
-at_ranger$train(tsk_e5.price.all, train_all.data)
-
-
-# make and score predictions
-#at_ranger$predict(tsk_e5.price.Monday)$score(measures)
-
-prediction = at_ranger$predict(tsk_e5.price.MTW, test_all.data)
+#run the code above, if it works we can try to visualise the results
 
