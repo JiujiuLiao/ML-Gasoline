@@ -16,15 +16,12 @@ df <- read.csv("aggregated_data.csv",row.names = 1)
 # make up a new subset for ML task(exclude )
 df.subset.e5 = df[,c(-1,-2,-4)]
 str(df.subset.e5)
+rm(df)
 
 #set character variables into factor so that regression tree can work
-df.subset.e5[,2] <- as.factor(df.subset.e5[,2])
-df.subset.e5[,5] <- as.factor(df.subset.e5[,5])
-df.subset.e5[,6] <- as.factor(df.subset.e5[,6])
-df.subset.e5[,7] <- as.factor(df.subset.e5[,7])
-df.subset.e5[,9] <- as.factor(df.subset.e5[,9])
-df.subset.e5[,10] <- as.factor(df.subset.e5[,10])
-df.subset.e5[,11] <- as.factor(df.subset.e5[,11])
+df.subset.e5[, c("brand", "region", "settlement","count_part","day","weekend","hour")] <- lapply(
+  df.subset.e5[, c("brand", "region", "settlement","count_part","day","weekend","hour")], as.factor)
+
 test.df <- df.subset.e5[1:2000,]
 
 ##################ML process ################
@@ -57,7 +54,7 @@ learners <- list(
   lrn("regr.ksvm")
 )
 
-resampling <- rsmp("cv", folds = 10)
+resampling <- rsmp("cv", folds = 5)
 resampling$instantiate(tsk_e5.price)
 
 
@@ -172,16 +169,6 @@ at_ranger <- AutoTuner$new(
   tuner = tuner
 )
 
-#at_ksvm <- AutoTuner$new(
-#  learner = lrn("regr.ksvm"),
-#  resampling = rsmp("cv", folds = 5),
-#  measure = msr("regr.rmse"),
-#  search_space = lts_svm,
-#  terminator = trm("evals", n_evals = 5),
-#  tuner = tuner
-#)
-
-
 # Define learners with hyperparameter tuning
 learners_tuned <- list(at_rpart, at_kknn, at_ranger,tuned_ksvm, lrn("regr.featureless"))
 learners_total <- list(at_rpart, 
@@ -221,5 +208,45 @@ autoplot(bmr) +
 
 
 1
+# train the model with all dataset using random forest
+#data spliting
+#train_all.data <- subset(df.subset.e5, df.subset.e5[, 9] != "Thu")
+#test_all.data <- subset(df.subset.e5, df.subset.e5[, 9] == "Thu")
 
+#Monday data set
+#df.Monday <- subset(df.subset.e5, df.subset.e5[,9] == "Mon")
+#Monday and Tuesday dataset
+df.MTW <- df.subset.e5 %>% filter(day %in% c("Mon", "Tue","Wed"))
+rm(df.subset.e5)
+#make this example reproducible
+set.seed(2024)
+
+#use 70% of dataset as training set and 30% as test set
+#sample <- sample(c(TRUE, FALSE), nrow(df.Monday), replace=TRUE, prob=c(0.7,0.3))
+#train.Monday  <- df.Monday[sample, ]
+#test.Monday   <- df.Monday[!sample, ]
+
+# Check the number of rows for each day
+#day_counts <- table(df.subset.e5$day)
+#print(day_counts)
+
+#task defining
+#tsk_e5.price.fulldataset = as_task_regr(train_all.data, target = "e5_price")
+#print(tsk_e5.price.fulldataset)
+tsk_e5.price.MTW = as_task_regr(df.MTW, target = "e5_price")
+print(tsk_e5.price.MTW)
+
+# load MSE and MAE measures
+#measures = msrs("regr.rmse")
+splits = partition(tsk_e5.price.MTW)
+
+# train learner
+#at_ranger$train(tsk_e5.price.fulldataset)
+#Monday data
+at_ranger$train(tsk_e5.price.MTW,splits$train)
+
+# make and score predictions
+#at_ranger$predict(tsk_e5.price.Monday)$score(measures)
+
+prediction = at_ranger$predict(tsk_e5.price.Monday, splits$test)
 
