@@ -208,6 +208,9 @@ library(purrr)  # For using the map function
 train_data <- test.df %>% filter(day %in% c("Fri", "Sat", "Sun", "Mon", "Tue"))
 test_data <- test.df %>% filter(day %in% c("Wed", "Thu"))
 
+#train the model
+at_ranger$train(tsk_e5.price)
+
 # Predict on the test data using the trained ranger model
 predictions <- at_ranger$predict_newdata(test_data)
 print(predictions)
