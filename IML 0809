@@ -1,0 +1,448 @@
+library(dplyr)
+library(ggplot2)
+
+#set work directory
+setwd("C:/Users/jiuji/OneDrive/Desktop/study/Advanced method in data analysis/Applications in Data Analytics")
+
+df <- read.csv("aggregated_data.csv",row.names = 1)
+# make up a new subset for ML task(exclude )
+df.subset.e5 = df[,c(-1,-2,-4)]
+str(df.subset.e5)
+rm(df)
+#set character variables into factor so that regression tree can work
+df.subset.e5[, c("brand", "region", "settlement","count_part","day","weekend","hour")] <- lapply(
+  df.subset.e5[, c("brand", "region", "settlement","count_part","day","weekend","hour")], as.factor)
+
+test.df <- df.subset.e5[1:4000,]
+
+
+##################ML process ################
+library(mlr3)
+library(mlr3verse)
+library(mlr3tuning)
+library(mlr3hyperband)
+library(mlr3viz)
+library(rpart)
+library(kknn)
+library(kernlab)
+library(paradox)
+
+#Partition data 
+train_test.data <- test.df %>% filter(day %in% c("Fri", "Sat", "Sun", "Mon", "Tue"))
+test_test.data <- test.df %>% filter(day %in% c("Wed", "Thu"))
+
+
+# load a task
+tsk_e5.price = as_task_regr(train_test.data, target = "e5_price",id= "id")
+print(tsk_e5.price)
+
+# Define learners and resampling strategy
+learners <- list(
+  lrn("regr.rpart"),
+  lrn("regr.kknn", k = 10L),
+  lrn("regr.featureless"),
+  lrn("regr.ranger"),
+  lrn("regr.ksvm")
+)
+
+resampling <- rsmp("cv", folds = 5)
+resampling$instantiate(tsk_e5.price)
+
+
+# Benchmark learners
+design <- benchmark_grid(
+  tasks = tsk_e5.price,
+  learners = learners,
+  resamplings = resampling
+)
+
+# Aggregate the benchmark results by RMSE instead of MSE
+bmr <- benchmark(design)
+bmr_rmse <- bmr$aggregate(msr("regr.rmse"))
+print(bmr_rmse)
+
+#Visualize the Comparison of Benchmark (Boxplot)
+plot_benchmark <- autoplot(bmr, measure = msr("regr.rmse")) +
+                  theme_bw() +
+                  ylab("Regression RMSE") +
+                  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12))
+print(plot_benchmark)
+
+# Save the plot
+ggsave(filename = "benchmark_results_test.df.png", plot = plot_benchmark, width = 8, height = 6)
+
+
+#Hyperparameter Optimization
+#tuning ksvm learner using Hyperband 
+l_ksvm <-lrn("regr.ksvm")
+ksvm_rob <- ppl("robustify", task = tsk_e5.price, learner = l_ksvm)  %>>% l_ksvm
+ksvm_rob %>% plot
+
+po("subsample")  #subsampling 
+
+graph_learner = GraphLearner$new(                
+  po("subsample") %>>%
+    ksvm_rob) 
+#The graph learner subsamples and then fits a support vector machine on the data subset. 
+#The parameter set of the graph learner is a combination of the parameter sets of the PipeOp and learner.
+graph_learner$id <- "hb.ksvm"
+
+
+# List all available parameters
+available_params <- as.data.table(graph_learner$param_set)[, .(id, lower, upper, levels)]
+print(available_params)
+
+# Set parameter values(search space) for tuning
+graph_learner$param_set$set_values(
+  subsample.frac        = to_tune(p_dbl(3^-3, 1, tags = "budget")),
+  regr.ksvm.kernel      = to_tune(c("rbfdot", "laplacedot", "besseldot", "anovadot")),
+  regr.ksvm.C           = to_tune(1e-4, 1e3, logscale = TRUE),
+  regr.ksvm.sigma       = to_tune(1e-4, 1e3, logscale = TRUE),
+  regr.ksvm.tol         = to_tune(1e-4, 2, logscale = TRUE),
+  regr.ksvm.degree      = to_tune(2, 5),
+  regr.ksvm.type        = "eps-svr"
+)
+
+#Support vector machines often crash or never finish the training with certain hyperparameter configurations. 
+#We set a timeout of 30 seconds and a fallback learner to handle these cases.
+graph_learner$encapsulate = c(train = "evaluate", predict = "evaluate")
+graph_learner$timeout = c(train = 30, predict = 30)  #30 seconds
+graph_learner$fallback = lrn("regr.featureless")
+
+#Let’s create the tuning instance. We use the "none" terminator because Hyperband controls the termination itself.
+instance_hb = TuningInstanceSingleCrit$new(
+  task = tsk_e5.price,
+  learner = graph_learner,
+  resampling = rsmp("cv", folds = 3),
+  terminator = trm("none")
+)
+instance_hb
+
+
+#We load the Hyperband tuner and set eta = 3.
+tuner = tnr("hyperband", eta = 3)
+tuner$optimize(instance_hb)
+
+# Create a new KSVM learner with the tuned parameters
+tuned_ksvm <- graph_learner$clone(deep = TRUE)
+tuned_ksvm$param_set$values <- instance_hb$result_learner_param_vals
+tuned_ksvm
+
+#Random Forest,KKNN, Decision Tree optimization
+#search space by default setting
+lts_rpart = lts("regr.rpart.default")
+lts_kknn = lts("regr.kknn.default")
+lts_ranger = lts("regr.ranger.default")
+
+# Define tuning instances
+tuner <- tnr("random_search")
+tuner
+
+at_rpart <- AutoTuner$new(
+  learner = lrn("regr.rpart"),
+  resampling = rsmp("cv", folds = 5),
+  measure = msr("regr.rmse"),
+  search_space = lts_rpart,
+  terminator = trm("evals", n_evals = 5),
+  tuner = tuner
+)
+
+at_kknn <- AutoTuner$new(
+  learner = lrn("regr.kknn"),
+  resampling = rsmp("cv", folds = 5),
+  measure = msr("regr.rmse"),
+  search_space = lts_kknn,
+  terminator = trm("evals", n_evals = 5),
+  tuner = tuner
+)
+
+at_ranger <- AutoTuner$new(
+  learner = lrn("regr.ranger"),
+  resampling = rsmp("cv", folds = 5),
+  measure = msr("regr.rmse"),
+  search_space = lts_ranger,
+  terminator = trm("evals", n_evals = 5),
+  tuner = tuner
+)
+
+# Define learners with hyperparameter tuning
+learners_tuned <- list(at_rpart, at_kknn, at_ranger,tuned_ksvm, lrn("regr.featureless"))
+learners_total <- list(at_rpart, 
+                       at_kknn, 
+                       at_ranger,
+                       tuned_ksvm, 
+                       lrn("regr.featureless"),
+                       lrn("regr.rpart"),
+                       lrn("regr.kknn", k = 10L),
+                       lrn("regr.ranger"),
+                       lrn("regr.ksvm"))
+
+#print(learners_tuned)
+
+#Define outer resampling
+outer_resampling <- rsmp("cv", folds = 5)
+
+# Perform nested resampling
+design_all.learners <- benchmark_grid(
+  tasks = tsk_e5.price,
+  learners = learners_total,
+  resamplings = outer_resampling
+)
+
+bmr_all.lrs <- benchmark(design_all.learners)
+bmr_rmse_all.lrs <- bmr_all.lrs$aggregate(msr("regr.rmse"))
+
+# Visual comparison of the benchmark results
+plot_benchmark_all.lrs <- autoplot(bmr_all.lrs, measure = msr("regr.rmse")) +
+  theme_bw() +
+  ylab("Regression RMSE") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12))
+print(plot_benchmark_all.lrs)
+# Save the plot
+ggsave(filename = "benchmark_results_all.lrs.png", plot = plot_benchmark_all.lrs, width = 8, height = 6)
+
+
+
+
+#Train full data set using the best learner(tuned ranger forest) that we got above
+train_data <- test.df %>% filter(day %in% c("Fri", "Sat", "Sun", "Mon", "Tue"))
+test_data <- test.df %>% filter(day %in% c("Wed", "Thu"))
+
+
+
+#a <- train_data %>%
+ # count(uuid)
+#a
+  
+#define task
+tsk_at.ranger <- as_task_regr(train_data, target = "e5_price",id="id")
+tsk_at.ranger
+
+#train the model
+#at_ranger$train(tsk_at.ranger)
+
+# Predict on the test data using the trained ranger model
+#predictions <- at_ranger$predict_newdata(test_data)
+#print(predictions)
+
+
+# Train the learners and predict on the test data, mainly to visualize the data set
+library(purrr)  # For using the map function
+learners_ranger.at_ranger <- list(lrn("regr.ranger"),at_ranger)
+
+predictions <- map_df(learners_ranger.at_ranger, function(learner) {
+  learner$train(tsk_e5.price)
+  prediction <- learner$predict_newdata(test_data)
+  data.frame(
+    actual = test_data$e5_price,
+    predicted = prediction$response,
+    learner = learner$id
+  )
+})
+
+# Plot predictions vs actual values
+plot_prediction.actual <- ggplot(predictions, aes(x = actual, y = predicted, color = learner)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(title = "Predictions vs Actual Values",
+       x = "Actual Values",
+       y = "Predicted Values") +
+  theme_minimal()
+
+ggsave(filename = "Prediction vs Actual values.png", plot = plot_prediction.actual, width = 8, height = 6)
+
+#Plot residuals
+predictions_residual <- predictions %>%    #add residual column to prediction data frame
+  mutate(residual = actual - predicted)
+
+plot_residual.actual <- ggplot(predictions_residual, aes(x = actual, y = residual, color = learner)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Residuals vs Actual Values",
+       x = "Actual Values",
+       y = "Residuals") +
+  theme_minimal()
+
+ggsave(filename = "Residual vs Actual values.png", plot = plot_residual.actual, width = 8, height = 6)
+
+#Plot density of residuals
+plot_Den.residual <- ggplot(predictions_residual, aes(x = residual, fill = learner)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Density Plot of Residuals",
+       x = "Residuals",
+       y = "Density") +
+  theme_minimal()
+
+ggsave(filename = "Density of residual.png", plot = plot_Den.residual, width = 8, height = 6)
+
+#remove data set to save space
+rm(df.subset.e5)
+
+#Interpretable Machine Learning
+#install.packages("iml")
+#install.packages("Matrix")
+library(iml)
+library(glmnet)
+# Create a Predictor object.
+predictor <- Predictor$new(
+  at_ranger,
+  data = tsk_at.ranger$data(),
+  y = tsk_e5.price$target_names
+)
+
+#feature importance
+importance <- FeatureImp$new(predictor, loss = "rmse")
+plot_Imp <- importance$plot()
+ggsave(filename = "feature_importance.png", plot = plot_Imp, width = 8, height = 6)
+
+#pdp plot
+pdp_hour <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "hour",
+  method = "pdp"
+); 
+plot_hour <- pdp_hour$plot()
+plot(plot_hour)
+
+pdp_d1 <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "d_1",
+  method = "pdp"
+); 
+plot_d1 <- pdp_d1$plot()
+plot(plot_d1)
+ggsave(filename = "pdp_d1.png", plot = plot_d1, width = 8, height = 6)
+
+#ALE PLOTS
+ale_d_1 <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "d_1",
+  method = "ale"
+); ale_d_1$plot()
+
+
+ale_hour <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "hour",
+  method = "ale"
+); ale_hour$plot()
+
+ale_road <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "d_road",
+  method = "ale"
+); ale_road$plot()
+
+ale_region <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "region",
+  method = "ale"
+); ale_region$plot()
+
+ale_freq <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "freq",
+  method = "ale"
+); ale_freq$plot()
+
+ale_day <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "day",
+  method = "ale"
+); ale_day$plot()
+
+ale_brand <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "brand",
+  method = "ale"
+); ale_brand$plot()
+
+ale_weekend <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "weekend",
+  method = "ale"
+); ale_weekend$plot()
+
+ale_settlement <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "settlement",
+  method = "ale"
+); ale_settlement$plot()
+
+ale_count_part <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "count_part",
+  method = "ale"
+); ale_count_part$plot()
+
+#plot all ALE at once   #cannot work,since count_part only is west Germany
+effs <- FeatureEffects$new(predictor, grid.size = 10)
+plot(effs)
+
+#ice plots
+ice_d_1 <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "d_1",
+  method = "pdp+ice"
+); ice_d_1$plot()
+
+ice <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "hour",
+  method = "pdp+ice"
+); ice$plot()
+
+ice_d_road <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "d_road",
+  method = "pdp+ice"
+); ice_d_road$plot()
+
+ice_region <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "region",
+  method = "pdp+ice"
+); ice_region$plot()
+
+
+ice_freq <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "freq",
+  method = "pdp+ice"
+); ice_freq$plot()
+
+
+ice_day <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "day",
+  method = "pdp+ice"
+); ice_day$plot()
+
+
+ice_brand <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "brand",
+  method = "pdp+ice"
+); ice_brand$plot()
+
+
+ice_weekend <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "weekend",
+  method = "pdp+ice"
+); ice_weekend$plot()
+
+
+ice_settlement <- FeatureEffect$new(
+  predictor = predictor,
+  feature = "settlement",
+  method = "pdp+ice"
+); ice_settlement$plot()
+
+
+shapley <- Shapley$new(
+  predictor = predictor,
+  x.interest = as.data.frame(tsk_e5.price$data(1))
+); shapley$plot()
+
+
